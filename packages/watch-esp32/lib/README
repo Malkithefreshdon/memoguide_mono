@@ -1,0 +1,7 @@
+Ce dossier est réservé aux bibliothèques locales au projet (non publiées sur le registre PlatformIO).
+
+Pour installer LilyGoLib (recommandé) :
+  git clone https://github.com/Xinyuan-LilyGO/LilyGoLib.git lib/LilyGoLib
+
+Puis ajouter dans platformio.ini :
+  lib_extra_dirs = lib

@@ -1,0 +1,8 @@
+[submodule "packages/watch-nrf"]
+	path = packages/watch-nrf
+	url = git@github.com:Malkithefreshdon/memo_montre.git
+	branch = audio_v1
+[submodule "packages/dashboard-nuxt"]
+	path = packages/dashboard-nuxt
+	url = git@github.com:Malkithefreshdon/memo_app.git
+	branch = main

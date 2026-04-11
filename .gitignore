@@ -1,0 +1,34 @@
+# macOS
+.DS_Store
+**/.DS_Store
+
+# Node (dashboard-nuxt est un submodule, mais au cas où)
+packages/dashboard-nuxt/node_modules/
+packages/dashboard-nuxt/.nuxt/
+packages/dashboard-nuxt/.output/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+packages/gateway-rpi/.venv/
+
+# PlatformIO
+packages/watch-esp32/.pio/
+
+# Zephyr (watch-nrf est un submodule, mais au cas où)
+packages/watch-nrf/build/
+
+# Editors
+.vscode/
+*.swp
+*.swo
+
+# Task (cache interne)
+.task/
+
+# Secrets — jamais commités
+.env
+.env.*
+!.env.example

@@ -1,0 +1,101 @@
+version: '3'
+
+vars:
+  ESP32_DIR: packages/watch-esp32
+  NRF_DIR: packages/watch-nrf
+  GATEWAY_DIR: packages/gateway-rpi
+  DASH_DIR: packages/dashboard-nuxt
+
+tasks:
+  # ── Dashboard (Nuxt) ─────────────────────────────────────────────────
+  dev:dashboard:
+    desc: "Start Nuxt dashboard in dev mode"
+    dir: "{{.DASH_DIR}}"
+    cmds:
+      - npm run dev
+
+  build:dashboard:
+    desc: "Build Nuxt dashboard for production"
+    dir: "{{.DASH_DIR}}"
+    cmds:
+      - npm run build
+
+  # ── Gateway (Python / Raspberry Pi) ──────────────────────────────────
+  dev:gateway:
+    desc: "Run the Python gateway locally"
+    dir: "{{.GATEWAY_DIR}}"
+    cmds:
+      - python3 gateway.py
+
+  test:gateway:
+    desc: "Run gateway audio tests"
+    dir: "{{.GATEWAY_DIR}}"
+    cmds:
+      - python3 test_audio.py
+
+  # ── Watch ESP32 (PlatformIO) ──────────────────────────────────────────
+  build:esp32:
+    desc: "Build firmware for LILYGO T-Watch S3 (PlatformIO)"
+    dir: "{{.ESP32_DIR}}"
+    cmds:
+      - pio run
+
+  flash:esp32:
+    desc: "Flash firmware to connected ESP32"
+    dir: "{{.ESP32_DIR}}"
+    cmds:
+      - pio run --target upload
+
+  monitor:esp32:
+    desc: "Open serial monitor for ESP32"
+    dir: "{{.ESP32_DIR}}"
+    cmds:
+      - pio device monitor
+
+  clean:esp32:
+    desc: "Clean ESP32 build artifacts"
+    dir: "{{.ESP32_DIR}}"
+    cmds:
+      - pio run --target clean
+
+  # ── Watch nRF (Zephyr / West) ─────────────────────────────────────────
+  build:nrf:
+    desc: "Build Zephyr firmware for nRF watch"
+    dir: "{{.NRF_DIR}}"
+    cmds:
+      - west build -b nrf5340dk/nrf5340/cpuapp
+
+  flash:nrf:
+    desc: "Flash Zephyr firmware via J-Link / nrfjprog"
+    dir: "{{.NRF_DIR}}"
+    cmds:
+      - west flash
+
+  clean:nrf:
+    desc: "Clean nRF build artifacts"
+    dir: "{{.NRF_DIR}}"
+    cmds:
+      - rm -rf build
+
+  # ── Cross-project ─────────────────────────────────────────────────────
+  build:all:
+    desc: "Build all packages"
+    cmds:
+      - task: build:esp32
+      - task: build:nrf
+      - task: build:dashboard
+
+  install:
+    desc: "Install all JS/Python dependencies"
+    cmds:
+      - cmd: npm install
+        dir: "{{.DASH_DIR}}"
+      - cmd: pip3 install -r requirements.txt
+        dir: "{{.GATEWAY_DIR}}"
+        ignore_error: true
+
+  lint:
+    desc: "Lint dashboard code"
+    dir: "{{.DASH_DIR}}"
+    cmds:
+      - npm run lint || true

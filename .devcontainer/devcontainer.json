@@ -1,0 +1,45 @@
+{
+  "name": "MemoGuide Dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    // Node.js (for Nuxt dashboard)
+    "ghcr.io/devcontainers/features/node:1": { "version": "22" },
+    // Python (for gateway)
+    "ghcr.io/devcontainers/features/python:1": { "version": "3.12" },
+    // Docker-in-Docker (optional: pour simuler la gateway en container)
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
+
+  "onCreateCommand": "bash .devcontainer/setup.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        // Embedded C/C++
+        "ms-vscode.cpptools",
+        "platformio.platformio-ide",
+        // Zephyr / nRF
+        "nordic-semiconductor.nrf-connect",
+        // Python
+        "ms-python.python",
+        "ms-python.pylance",
+        // Vue / Nuxt
+        "Vue.volar",
+        "antfu.unocss",
+        // Utilitaires
+        "task.vscode-task",
+        "EditorConfig.EditorConfig",
+        "eamodio.gitlens"
+      ],
+      "settings": {
+        "editor.formatOnSave": true,
+        "python.defaultInterpreterPath": "/usr/local/bin/python3"
+      }
+    }
+  },
+
+  "postCreateCommand": "cd packages/dashboard-nuxt && npm install",
+
+  "remoteUser": "vscode"
+}

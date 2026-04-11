@@ -1,0 +1,40 @@
+# Normalisation des fins de ligne
+* text=auto
+
+# C / C++ (embedded)
+*.c   text eol=lf diff=cpp
+*.h   text eol=lf diff=cpp
+*.cpp text eol=lf diff=cpp
+*.hpp text eol=lf diff=cpp
+
+# Python
+*.py text eol=lf diff=python
+
+# JavaScript / TypeScript / Vue
+*.js  text eol=lf diff=javascript
+*.ts  text eol=lf diff=javascript
+*.vue text eol=lf diff=javascript
+*.json text eol=lf
+
+# Config / build
+*.yml  text eol=lf
+*.yaml text eol=lf
+*.toml text eol=lf
+*.ini  text eol=lf
+CMakeLists.txt text eol=lf
+Kconfig        text eol=lf
+*.conf         text eol=lf
+*.overlay      text eol=lf
+
+# Markdown / docs
+*.md text eol=lf
+
+# Binaires — pas de conversion
+*.png  binary
+*.jpg  binary
+*.ico  binary
+*.wav  binary
+*.bin  binary
+*.elf  binary
+*.hex  binary
+*.uf2  binary
