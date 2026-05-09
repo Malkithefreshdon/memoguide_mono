@@ -105,6 +105,19 @@
 #define LOG_TAG_WIFI        "WIFI"
 
 // ------------------------------------------------------------
+// WiFi — configurer avant le premier test audio
+// ------------------------------------------------------------
+#define WIFI_SSID               "Freebox-0C6077"
+#define WIFI_PASSWORD           "xtkthqnhx7q9fbs3qf7wvk"
+
+// ------------------------------------------------------------
+// Audio streaming UDP (Gateway → Montre)
+// ------------------------------------------------------------
+#define AUDIO_UDP_PORT          5005
+#define AUDIO_SAMPLE_RATE       16000   // Hz
+#define AUDIO_CHUNK_SIZE        512     // octets = 32ms @ 16kHz stéréo 16-bit
+
+// ------------------------------------------------------------
 // Localisation BLE iBeacon → Gateway
 // ------------------------------------------------------------
 #define BLE_DEVICE_NAME         "Memo_Montre"

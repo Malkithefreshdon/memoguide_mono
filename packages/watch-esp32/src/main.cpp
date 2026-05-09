@@ -6,6 +6,7 @@
 #include "sensors/power.h"
 #include "connectivity/wifi_manager.h"
 #include "connectivity/ble_localization.h"
+#include "connectivity/audio_stream.h"
 
 // ============================================================
 // Déclarations de tâches FreeRTOS
@@ -42,8 +43,12 @@ void setup() {
         Serial.println("[SENSOR] ERREUR init BMA423 — les données IMU ne seront pas disponibles.");
     }
 
-    // 5. WiFi (optionnel au démarrage)
-    // wifi_connect("SSID", "PASSWORD");
+    // 5. WiFi + audio stream UDP
+    if (wifi_connect(WIFI_SSID, WIFI_PASSWORD)) {
+        audio_stream_init();
+    } else {
+        Serial.println("[MAIN] WiFi indisponible — audio stream désactivé.");
+    }
 
     // 6. Localisation BLE iBeacon
     localization_init();
