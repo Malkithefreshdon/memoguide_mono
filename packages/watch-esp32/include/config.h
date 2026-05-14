@@ -28,12 +28,15 @@
 #define I2C_FREQ_HZ         400000
 
 // ------------------------------------------------------------
-// Bus I2C touch — FT6336U uniquement
+// Bus I2C touch — FT6236U (GPIO39=SDA, GPIO40=SCL, GPIO38=INT)
+// NOTE: GPIO22/23 n'existent pas sur ESP32-S3 ; GPIO26-32 = flash octal SPI.
+//       GPIO38 partagé avec PIN_DISPLAY_DC — INT non utilisé (polling I2C).
 // ------------------------------------------------------------
-#define TOUCH_SDA_PIN       23
-#define TOUCH_SCL_PIN       32
-#define TOUCH_INT_PIN       38
+#define TOUCH_SDA_PIN       39
+#define TOUCH_SCL_PIN       40
+#define TOUCH_INT_PIN       38   // partagé avec display DC — ne pas utiliser en IRQ
 #define TOUCH_I2C_ADDR      0x38
+#define TOUCH_I2C_FREQ_HZ   200000  // 200kHz plus stable que 400kHz sans pullups ext.
 
 // ------------------------------------------------------------
 // Accéléromètre (BMA423 — I2C principal)

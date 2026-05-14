@@ -27,8 +27,27 @@ void setup() {
     Serial.println("\n=== T-Watch S3 — Boot ===");
 
     // 1. Initialisation des deux bus I2C
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);       // principal : AXP2101, BMA423, RTC (GPIO 10/11)
-    Wire1.begin(TOUCH_SDA_PIN, TOUCH_SCL_PIN, I2C_FREQ_HZ);  // touch : FT6336U (GPIO 39/40)
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, I2C_FREQ_HZ);                    // principal : AXP2101, BMA423, RTC (GPIO 10/11)
+    Wire1.begin(TOUCH_SDA_PIN, TOUCH_SCL_PIN, TOUCH_I2C_FREQ_HZ);         // touch : FT6236U (GPIO 23/32)
+
+    // Scan + init FT6236U
+    Wire1.beginTransmission(TOUCH_I2C_ADDR);
+    if (Wire1.endTransmission() == 0) {
+        Serial.println("[TOUCH] FT6236U détecté à 0x38");
+        // Sortie du mode hibernate → mode normal
+        Wire1.beginTransmission(TOUCH_I2C_ADDR);
+        Wire1.write(0x00);  // Device Mode register
+        Wire1.write(0x00);  // 0x00 = Normal operating mode
+        Wire1.endTransmission();
+        delay(10);
+        // Seuil de détection (0x80) : 22 par défaut, on abaisse à 20 (plus sensible)
+        Wire1.beginTransmission(TOUCH_I2C_ADDR);
+        Wire1.write(0x80);
+        Wire1.write(20);
+        Wire1.endTransmission();
+    } else {
+        Serial.println("[TOUCH] ERREUR — FT6236U non détecté sur Wire1 (SDA=23, SCL=32)");
+    }
 
     // 2. Power management (AXP2101) en premier — alimente les autres composants
     if (!power_init()) {
@@ -83,7 +102,7 @@ void setup() {
     xTaskCreatePinnedToCore(task_display,      "display", 8192,  nullptr, 2, nullptr, 1);
     xTaskCreatePinnedToCore(task_localization, "ble_loc", 8192,  nullptr, 1, nullptr, 0);
     xTaskCreatePinnedToCore(guidance_task,     "guidance", 4096, nullptr, 1, nullptr, 0);
-    xTaskCreatePinnedToCore(task_touch,        "touch",   2048,  nullptr, 2, nullptr, 1);
+    xTaskCreatePinnedToCore(task_touch,        "touch",   4096,  nullptr, 2, nullptr, 1);
 
     Serial.println("[MAIN] Initialisation terminée.");
 }
@@ -159,17 +178,27 @@ static void task_localization(void *pvParameters) {
 // ============================================================
 static void task_touch(void *pvParameters) {
     bool was_touched = false;
+    uint32_t diag_count = 0;  // logs de diagnostic les 20 premières secondes
 
     for (;;) {
         // Lecture TD_STATUS : bits [3:0] = nombre de points actifs
         Wire1.beginTransmission(TOUCH_I2C_ADDR);
         Wire1.write(0x02);
-        Wire1.endTransmission(false);
+        uint8_t i2c_err = Wire1.endTransmission(false);
         Wire1.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)1);
         uint8_t td = Wire1.available() ? (Wire1.read() & 0x0F) : 0;
 
-        bool is_touched = (td > 0);
+        if (diag_count < 400) {  // ~20 s de logs (400 × 50ms)
+            if (diag_count % 20 == 0) {  // log toutes les secondes
+                Serial.printf("[TOUCH] I2C err=%d  TD_STATUS=0x%02X  td=%d  was=%d\n",
+                              i2c_err, td, td, was_touched);
+            }
+            diag_count++;
+        }
+
+        bool is_touched = (td > 0 && i2c_err == 0);
         if (is_touched && !was_touched) {
+            Serial.println("[TOUCH] Toucher détecté → toggle mode");
             display_toggle_dev_mode();
         }
         was_touched = is_touched;
