@@ -30,9 +30,9 @@
 // ------------------------------------------------------------
 // Bus I2C touch — FT6336U uniquement
 // ------------------------------------------------------------
-#define TOUCH_SDA_PIN       39
-#define TOUCH_SCL_PIN       40
-#define TOUCH_INT_PIN       16
+#define TOUCH_SDA_PIN       23
+#define TOUCH_SCL_PIN       32
+#define TOUCH_INT_PIN       38
 #define TOUCH_I2C_ADDR      0x38
 
 // ------------------------------------------------------------

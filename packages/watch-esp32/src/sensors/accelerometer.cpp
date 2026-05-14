@@ -17,6 +17,18 @@
 static bool    _initialized = false;
 static AccelData _data = {};
 
+// ── Détection de chute ────────────────────────────────────────────────────
+// Seuils en m/s²
+static constexpr float FALL_FREE_FALL_THRESHOLD = 3.0f;   // < 0.3g → libre chute
+static constexpr float FALL_IMPACT_THRESHOLD    = 19.6f;  // > 2g   → impact
+static constexpr uint32_t FALL_WINDOW_MS        = 600;    // fenêtre libre chute → impact
+static constexpr uint32_t FALL_DISPLAY_MS       = 5000;   // durée affichage alerte
+
+static bool     _free_fall_pending = false;
+static uint32_t _free_fall_time_ms = 0;
+static bool     _fall_detected     = false;
+static uint32_t _fall_detect_time_ms = 0;
+
 // --- Helpers I2C bas niveau ---
 static bool bma423_write(uint8_t reg, uint8_t val) {
     Wire.beginTransmission(BMA423_I2C_ADDR);
@@ -104,6 +116,33 @@ void accel_update() {
                     | ((uint32_t)step_raw[2] << 16)
                     | ((uint32_t)step_raw[3] << 24);
     }
+
+    // ── Machine à états : libre chute → impact ────────────────────────────
+    float mag = sqrtf(_data.x * _data.x + _data.y * _data.y + _data.z * _data.z);
+    uint32_t now = (uint32_t)(millis());
+
+    if (!_free_fall_pending) {
+        if (mag < FALL_FREE_FALL_THRESHOLD) {
+            _free_fall_pending = true;
+            _free_fall_time_ms = now;
+        }
+    } else {
+        if (now - _free_fall_time_ms > FALL_WINDOW_MS) {
+            // Fenêtre expirée sans impact → fausse alerte
+            _free_fall_pending = false;
+        } else if (mag > FALL_IMPACT_THRESHOLD) {
+            // Impact détecté après libre chute → chute confirmée
+            _free_fall_pending    = false;
+            _fall_detected        = true;
+            _fall_detect_time_ms  = now;
+            Serial.printf("[FALL] Chute détectée — magnitude impact: %.2f m/s²\n", mag);
+        }
+    }
+
+    // Expiration automatique de l'alerte après FALL_DISPLAY_MS
+    if (_fall_detected && (now - _fall_detect_time_ms > FALL_DISPLAY_MS)) {
+        _fall_detected = false;
+    }
 }
 
 AccelData accel_get_data() {
@@ -114,4 +153,12 @@ void accel_reset_steps() {
     // Le reset du compteur se fait via la commande 0xB2 sur le registre CMD
     bma423_write(0x7E, 0xB2);
     _data.steps = 0;
+}
+
+bool accel_fall_detected() {
+    return _fall_detected;
+}
+
+void accel_clear_fall() {
+    _fall_detected = false;
 }

@@ -1,0 +1,46 @@
+{
+  "instructions": [
+    {
+      "id": "turn_right",
+      "arrow": "right",
+      "line1": "Prenez le couloir",
+      "line2": "sur la droite",
+      "audio": "/audio/turn_right.pcm"
+    },
+    {
+      "id": "turn_left",
+      "arrow": "left",
+      "line1": "Prenez le couloir",
+      "line2": "sur la gauche",
+      "audio": "/audio/turn_left.pcm"
+    },
+    {
+      "id": "go_straight",
+      "arrow": "straight",
+      "line1": "Continuez",
+      "line2": "dans le couloir",
+      "audio": "/audio/go_straight.pcm"
+    },
+    {
+      "id": "stairs_up",
+      "arrow": "stairs_up",
+      "line1": "Montez",
+      "line2": "l escalier",
+      "audio": "/audio/stairs_up.pcm"
+    },
+    {
+      "id": "elevator",
+      "arrow": "elevator",
+      "line1": "Prenez",
+      "line2": "l ascenseur",
+      "audio": "/audio/elevator.pcm"
+    },
+    {
+      "id": "arrived",
+      "arrow": "arrived",
+      "line1": "Vous etes",
+      "line2": "arrives !",
+      "audio": "/audio/arrived.pcm"
+    }
+  ]
+}

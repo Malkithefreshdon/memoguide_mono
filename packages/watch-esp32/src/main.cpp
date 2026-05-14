@@ -1,5 +1,6 @@
 #include <Arduino.h>
 #include <Wire.h>
+#include <LittleFS.h>
 #include "config.h"
 #include "display/display.h"
 #include "sensors/accelerometer.h"
@@ -7,6 +8,7 @@
 #include "connectivity/wifi_manager.h"
 #include "connectivity/ble_localization.h"
 #include "connectivity/audio_stream.h"
+#include "connectivity/guidance.h"
 
 // ============================================================
 // Déclarations de tâches FreeRTOS
@@ -14,6 +16,7 @@
 static void task_sensor(void *pvParameters);
 static void task_display(void *pvParameters);
 static void task_localization(void *pvParameters);
+static void task_touch(void *pvParameters);
 
 // ============================================================
 // setup()
@@ -30,11 +33,29 @@ void setup() {
     // 2. Power management (AXP2101) en premier — alimente les autres composants
     if (!power_init()) {
         Serial.println("[POWER] ERREUR init AXP2101 — arrêt.");
-        // En production : deep sleep ou reboot
         while (true) delay(1000);
     }
 
-    // 3. Écran
+    // 3. LittleFS (images splash + logo_icon)
+    if (!LittleFS.begin(false)) {
+        Serial.println("[FS] LittleFS non monté — uploadez le filesystem via PlatformIO > Platform > Upload Filesystem Image");
+    } else {
+        Serial.println("[FS] LittleFS OK");
+        // Debug : liste les fichiers présents
+        File root = LittleFS.open("/");
+        File entry = root.openNextFile();
+        while (entry) {
+            Serial.printf("[FS]  %s (%u o)\n", entry.name(), (unsigned)entry.size());
+            entry = root.openNextFile();
+        }
+        // Vérification des assets requis
+        if (!LittleFS.exists("/images/logo.png"))
+            Serial.println("[FS] MANQUANT: /images/logo.png");
+        if (!LittleFS.exists("/images/logo_icon.png"))
+            Serial.println("[FS] MANQUANT: /images/logo_icon.png");
+    }
+
+    // 4. Écran + splash 5s
     display_init();
     display_show_splash();
 
@@ -43,11 +64,15 @@ void setup() {
         Serial.println("[SENSOR] ERREUR init BMA423 — les données IMU ne seront pas disponibles.");
     }
 
-    // 5. WiFi + audio stream UDP
+    // 5. WiFi + NTP + audio stream UDP + guidage HTTP
     if (wifi_connect(WIFI_SSID, WIFI_PASSWORD)) {
+        // NTP — France (UTC+1 hiver, UTC+2 été)
+        configTime(3600, 3600, "pool.ntp.org", "time.google.com");
+        Serial.println("[NTP] Synchronisation heure en cours...");
         audio_stream_init();
+        guidance_init();
     } else {
-        Serial.println("[MAIN] WiFi indisponible — audio stream désactivé.");
+        Serial.println("[MAIN] WiFi indisponible — audio stream et guidage désactivés.");
     }
 
     // 6. Localisation BLE iBeacon
@@ -57,6 +82,8 @@ void setup() {
     xTaskCreatePinnedToCore(task_sensor,       "sensor",  4096,  nullptr, 1, nullptr, 0);
     xTaskCreatePinnedToCore(task_display,      "display", 8192,  nullptr, 2, nullptr, 1);
     xTaskCreatePinnedToCore(task_localization, "ble_loc", 8192,  nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(guidance_task,     "guidance", 4096, nullptr, 1, nullptr, 0);
+    xTaskCreatePinnedToCore(task_touch,        "touch",   2048,  nullptr, 2, nullptr, 1);
 
     Serial.println("[MAIN] Initialisation terminée.");
 }
@@ -122,5 +149,31 @@ static void task_localization(void *pvParameters) {
     for (;;) {
         localization_process();
         vTaskDelayUntil(&last_wake, period);
+    }
+}
+
+// ============================================================
+// Tâche : détection tactile FT6336U — toggle home ↔ dev (core 1)
+// Poll le registre TD_STATUS (0x02) sur Wire1 toutes les 50 ms.
+// Le toggle se déclenche sur le front montant du toucher (0→n).
+// ============================================================
+static void task_touch(void *pvParameters) {
+    bool was_touched = false;
+
+    for (;;) {
+        // Lecture TD_STATUS : bits [3:0] = nombre de points actifs
+        Wire1.beginTransmission(TOUCH_I2C_ADDR);
+        Wire1.write(0x02);
+        Wire1.endTransmission(false);
+        Wire1.requestFrom((uint8_t)TOUCH_I2C_ADDR, (uint8_t)1);
+        uint8_t td = Wire1.available() ? (Wire1.read() & 0x0F) : 0;
+
+        bool is_touched = (td > 0);
+        if (is_touched && !was_touched) {
+            display_toggle_dev_mode();
+        }
+        was_touched = is_touched;
+
+        vTaskDelay(pdMS_TO_TICKS(50));
     }
 }

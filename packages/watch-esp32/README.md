@@ -10,14 +10,15 @@ Développé avec **PlatformIO** + framework **Arduino** sous **VS Code**.
 1. [Matériel — Specs de la T-Watch S3](#1-matériel--specs-de-la-t-watch-s3)
 2. [Pinout & adresses I2C](#2-pinout--adresses-i2c)
 3. [Architecture du projet](#3-architecture-du-projet)
-4. [Setup de l'environnement](#4-setup-de-lenvironnement)
-5. [Extensions VS Code recommandées](#5-extensions-vs-code-recommandées)
-6. [Build, flash & monitor](#6-build-flash--monitor)
-7. [Capteurs — détails techniques](#7-capteurs--détails-techniques)
-8. [Gestion d'énergie (AXP2101)](#8-gestion-dénergie-axp2101)
-9. [FreeRTOS — architecture des tâches](#9-freertos--architecture-des-tâches)
-10. [Différences T-Watch S3 vs S3 Plus](#10-différences-t-watch-s3-vs-s3-plus)
-11. [Ressources & liens](#11-ressources--liens)
+4. [Fonctionnalités implémentées](#4-fonctionnalités-implémentées)
+5. [Setup de l'environnement](#5-setup-de-lenvironnement)
+6. [Extensions VS Code recommandées](#6-extensions-vs-code-recommandées)
+7. [Build, flash & monitor](#7-build-flash--monitor)
+8. [Capteurs — détails techniques](#8-capteurs--détails-techniques)
+9. [Gestion d'énergie (AXP2101)](#9-gestion-dénergie-axp2101)
+10. [FreeRTOS — architecture des tâches](#10-freertos--architecture-des-tâches)
+11. [Différences T-Watch S3 vs S3 Plus](#11-différences-t-watch-s3-vs-s3-plus)
+12. [Ressources & liens](#12-ressources--liens)
 
 ---
 
@@ -58,11 +59,11 @@ Développé avec **PlatformIO** + framework **Arduino** sous **VS Code**.
 | PCF8563 (RTC) | `0x51` | — |
 | DRV2605 (haptique) | `0x5A` | — |
 
-### Bus I2C touch (GPIO 39 SDA / GPIO 40 SCL)
+### Bus I2C touch (GPIO 23 SDA / GPIO 32 SCL)
 
 | Périphérique | Adresse | Interruption |
 |---|---|---|
-| FT6336U (touch) | `0x38` | GPIO 16 |
+| FT6336U (touch) | `0x38` | GPIO 38 |
 
 ### Écran SPI (ST7789V)
 
@@ -118,24 +119,26 @@ Développé avec **PlatformIO** + framework **Arduino** sous **VS Code**.
 ## 3. Architecture du projet
 
 ```
-Memo_Bracelet/
+watch-esp32/
 ├── src/
 │   ├── main.cpp                  # Entrée, init, tâches FreeRTOS
 │   ├── display/
-│   │   ├── display.h             # API écran
-│   │   └── display.cpp           # Pilote TFT_eSPI (ST7789V)
+│   │   ├── display.h             # API écran publique
+│   │   └── display.cpp           # LovyanGFX (ST7789V) — home, dev, guidage
 │   ├── sensors/
-│   │   ├── accelerometer.h/cpp   # BMA423 (accel + podomètre)
+│   │   ├── accelerometer.h/cpp   # BMA423 (accel, podomètre, détection de chute)
 │   │   └── power.h/cpp           # AXP2101 (PMU)
-│   ├── connectivity/
-│   │   ├── wifi_manager.h/cpp    # WiFi + NTP
-│   └── ui/                       # (à compléter : écrans LVGL, widgets)
+│   └── connectivity/
+│       ├── wifi_manager.h/cpp    # WiFi
+│       ├── audio_stream.h/cpp    # Stream audio UDP
+│       ├── ble_localization.h/cpp# iBeacon BLE
+│       └── guidance.h/cpp        # Guidage HTTP/SSE
+├── data/
+│   └── images/
+│       ├── logo.png              # Logo MemoGuide complet (splash)
+│       └── logo_icon.png         # Icône MemoGuide (cadran home)
 ├── include/
 │   └── config.h                  # Pins, adresses I2C, constantes
-├── lib/                          # Librairies locales (si nécessaire)
-├── .vscode/
-│   ├── extensions.json           # Extensions VS Code recommandées
-│   └── settings.json             # Config éditeur
 ├── platformio.ini                # Config build PlatformIO
 └── README.md
 ```
@@ -144,18 +147,115 @@ Memo_Bracelet/
 
 ```
 setup()
-  ├── Wire.begin()       → Bus I2C
-  ├── power_init()       → AXP2101 : alimente les rails
-  ├── display_init()     → ST7789V + PWM backlight
-  ├── accel_init()       → BMA423
+  ├── Wire.begin(10, 11)     → I2C principal (AXP2101, BMA423, RTC)
+  ├── Wire1.begin(23, 32)    → I2C touch (FT6336U)
+  ├── power_init()           → AXP2101 : alimente les rails
+  ├── LittleFS.begin()       → Partition images (logo, logo_icon)
+  ├── display_init()         → ST7789V via LovyanGFX
+  ├── display_show_splash()  → logo.png 5 s sur fond blanc
+  ├── accel_init()           → BMA423
+  ├── wifi_connect() + NTP   → Heure temps réel (pool.ntp.org)
+  ├── audio_stream_init()
+  ├── localization_init()
   └── FreeRTOS tasks
-        ├── task_sensor (core 0, 10 Hz)   → IMU, touch, RTC
-        └── task_display (core 1, 30 fps) → rendu écran
+        ├── task_sensor  (core 0, 100 ms) → IMU + détection de chute
+        ├── task_display (core 1,  33 ms) → rendu écran 30 fps
+        ├── task_localization (core 0)    → BLE iBeacon
+        ├── guidance_task    (core 0)     → guidage HTTP/SSE
+        └── task_touch       (core 1,  50 ms) → FT6336U → toggle UI
 ```
 
 ---
 
-## 4. Setup de l'environnement
+## 4. Fonctionnalités implémentées
+
+### Splash screen
+
+Au démarrage, la montre affiche le logo MemoGuide (`data/images/logo.png`) sur fond blanc pendant **5 secondes** avant de laisser place à l'interface principale.
+
+> Les images sont chargées depuis la partition **LittleFS**. Si LittleFS n'est pas monté (filesystem jamais uploadé), un écran texte de fallback s'affiche.
+
+---
+
+### Interface Home (cadran par défaut)
+
+L'interface par défaut est un **cadran minimaliste** sur fond blanc :
+
+| Zone | Contenu |
+|------|---------|
+| Haut droite | Niveau de batterie (%, rouge si < 20%) |
+| Centre | Heure **HH:MM** en grande police rose-crimson (NTP) |
+| Bas centre | Logo icône MemoGuide (`data/images/logo_icon.png`) |
+
+**Heure** : synchronisée via NTP (serveur `pool.ntp.org`, fuseau `Europe/Paris` — UTC+1 hiver, UTC+2 été). Affiche `--:--` jusqu'à la première synchronisation WiFi.
+
+---
+
+### Interface Dev (dashboard debug)
+
+Mode diagnostic pour le développement, fond noir :
+
+| Zone | Contenu |
+|------|---------|
+| Header | `MemoGuide [DEV]` + batterie |
+| Accéléromètre | X, Y, Z en m/s², tension batterie |
+| Balises BLE | Liste des beacons avec RSSI coloré |
+| Gateway | Compteur TX + uptime |
+
+---
+
+### Bascule Home ↔ Dev (tactile)
+
+Un **toucher de l'écran** bascule entre l'interface Home et l'interface Dev.
+
+- Implémenté dans `task_touch` (core 1, polling 50 ms)
+- Lecture du registre `TD_STATUS` (0x02) du FT6336U via I2C
+- Déclenchement sur le **front montant** (0 → ≥1 point de contact)
+
+---
+
+### Détection de chute
+
+Algorithme embarqué à deux phases dans `accel_update()` (10 Hz) :
+
+| Phase | Condition | Seuil |
+|-------|-----------|-------|
+| **Libre chute** | Magnitude < seuil | < 3 m/s² (≈ 0.3g) |
+| **Impact** | Magnitude > seuil dans les 600 ms | > 19.6 m/s² (≈ 2g) |
+
+En cas de chute confirmée :
+- Log série : `[FALL] Chute détectée — magnitude impact: XX.XX m/s²`
+- **Overlay rouge clignotant** affiché 5 secondes par-dessus n'importe quel mode (home ou dev) :
+
+```
+┌────────────────────────────────┐
+│      CHUTE DETECTEE            │  ← rouge clignotant à 1 Hz
+│    Appel d'urgence...          │
+└────────────────────────────────┘
+```
+
+API publique :
+```cpp
+bool accel_fall_detected();  // true pendant 5 s après la chute
+void accel_clear_fall();     // acquitter manuellement
+```
+
+---
+
+### Assets LittleFS (`data/images/`)
+
+| Fichier | Usage | Taille |
+|---------|-------|--------|
+| `logo.png` | Splash screen au démarrage | ~11 KB |
+| `logo_icon.png` | Cadran home (sous l'heure) | ~17 KB |
+
+Les PNG sont chargés via `heap_caps_malloc` (PSRAM 8MB en priorité) puis décodés avec `drawPng()` de LovyanGFX.
+
+> **Note** : LovyanGFX ne supporte pas `fs::LittleFSFS` dans `DataWrapperT`. La solution retenue lit le fichier en RAM puis appelle `drawPng(buffer, size)` au lieu de `drawPngFile()`.
+
+---
+
+## 5. Setup de l'environnement
 
 ### Prérequis système
 
@@ -249,7 +349,7 @@ La T-Watch S3 utilise le **USB natif ESP32-S3** (pas de convertisseur UART exter
 
 ---
 
-## 5. Extensions VS Code recommandées
+## 6. Extensions VS Code recommandées
 
 Le fichier `.vscode/extensions.json` contient la liste complète. VS Code proposera de les installer automatiquement à l'ouverture du projet.
 
@@ -280,20 +380,51 @@ Le fichier `.vscode/extensions.json` contient la liste complète. VS Code propos
 
 ---
 
-## 6. Build, flash & monitor
+## 7. Build, flash & monitor
+
+### Via VS Code PlatformIO (recommandé)
+
+Ouvrir la barre latérale PlatformIO (icône fourmi) :
+
+```
+PROJECT TASKS
+└── twatch_s3
+    ├── General
+    │   ├── Build                → Compiler
+    │   ├── Upload               → Compiler + flasher le firmware
+    │   └── Monitor              → Ouvrir le monitor série
+    └── Platform
+        └── Upload Filesystem Image  → Flasher la partition LittleFS (images)
+```
+
+> **Important** : `Upload Filesystem Image` doit être exécuté **au moins une fois** (ou après modification des fichiers dans `data/`) pour que les images s'affichent. Le firmware et le filesystem sont deux partitions Flash distinctes.
+
+### Via CLI PlatformIO
 
 ```bash
-# Depuis le terminal VS Code ou le terminal système
 pio run                          # Build uniquement
-pio run -t upload                # Build + flash
-pio run -t monitor               # Ouvrir le monitor série (115200 baud)
-pio run -t upload -t monitor     # Flash puis monitor en une commande
+pio run -t upload                # Build + flash firmware
+pio run -t uploadfs              # Flash la partition LittleFS (images)
+pio run -t upload -t monitor     # Flash puis monitor
+pio run -e twatch_s3_debug -t upload  # Env debug
+pio run -t clean                 # Nettoyer
+```
 
-# Cibler un env spécifique
-pio run -e twatch_s3_debug -t upload
+### Ordre de flash recommandé (première installation)
 
-# Nettoyer
-pio run -t clean
+```
+1. Upload Filesystem Image  → grave les PNG dans LittleFS
+2. Upload                   → grave le firmware
+3. Monitor                  → vérifier les logs [FS] au démarrage
+```
+
+Les logs de démarrage confirment le bon montage :
+```
+[FS] LittleFS OK
+[FS]  /images/logo.png (11264 o)
+[FS]  /images/logo_icon.png (17408 o)
+[DISPLAY] LovyanGFX OK — ST7789V 240×240
+[NTP] Synchronisation heure en cours...
 ```
 
 ### Décodage des exceptions
@@ -302,7 +433,7 @@ Le filtre `esp32_exception_decoder` dans `platformio.ini` traduit automatiquemen
 
 ---
 
-## 7. Capteurs — détails techniques
+## 8. Capteurs — détails techniques
 
 ### BMA423 — Accéléromètre 3 axes + podomètre
 
@@ -328,7 +459,7 @@ Le filtre `esp32_exception_decoder` dans `platformio.ini` traduit automatiquemen
 - **Interface** : I2C, adresse `0x38`
 - **Type** : single/dual touch
 - **Résolution** : 240×240 px
-- **Interruption** : GPIO 16 (active low)
+- **Interruption** : GPIO 38 (active low — non utilisé, on poll I2C directement)
 - **Registres principaux** :
 
 | Registre | Adresse | Description |
@@ -358,7 +489,7 @@ Le filtre `esp32_exception_decoder` dans `platformio.ini` traduit automatiquemen
 
 ---
 
-## 8. Gestion d'énergie (AXP2101)
+## 9. Gestion d'énergie (AXP2101)
 
 L'AXP2101 est le PMU (Power Management Unit) central de la montre. **Aucun autre composant ne doit être initialisé avant lui** — c'est lui qui alimente les rails de tension.
 
@@ -392,25 +523,36 @@ Le wake-up peut être déclenché par :
 
 ---
 
-## 9. FreeRTOS — architecture des tâches
+## 10. FreeRTOS — architecture des tâches
 
-ESP32-S3 est dual-core. Les tâches sont distribuées pour éviter les contentions :
+ESP32-S3 est dual-core. Les tâches sont distribuées pour éviter les contentions SPI :
 
 ```
-Core 0                          Core 1
-──────────────────────          ──────────────────────
-task_sensor (100 ms)            task_display (33 ms)
-  ├── accel_update()              ├── display_update()
-  ├── touch_read()                └── lvgl_tick() (optionnel)
-  ├── rtc_update()
-  └── power_check_sleep()
+Core 0                              Core 1
+──────────────────────────          ──────────────────────────────
+task_sensor      (100 ms)           task_display    (33 ms / 30 fps)
+  └── accel_update()                  └── display_update()
+       ├── lecture BMA423 I2C               ├── draw_home_frame()   ← mode home
+       └── détection de chute              │     ├── heure NTP
+                                           │     ├── logo_icon.png
+task_localization (2 000 ms)              │     └── batterie %
+  └── localization_process()             ├── draw_dev_frame()    ← mode dev
+       ├── scan BLE beacons               │     ├── accel X/Y/Z
+       └── advertising iBeacon            │     ├── balises BLE
+                                           │     └── gateway TX
+guidance_task    (event-driven)           ├── draw_guidance_frame() ← navigation
+  └── SSE HTTP → display_show_guidance()  └── draw_fall_overlay() ← si chute
+
+                                    task_touch      (50 ms)
+                                      └── poll FT6336U TD_STATUS
+                                           └── toucher → display_toggle_dev_mode()
 ```
 
-**Règle importante** : ne jamais appeler de fonctions TFT/SPI depuis le core 0. TFT_eSPI n'est pas thread-safe par défaut. Utiliser un mutex si des données doivent être partagées entre les deux tâches.
+**Règle importante** : tout accès SPI (LovyanGFX) doit se faire depuis le core 1. Les données partagées entre tâches (AccelData, PowerStatus, BeaconSnapshot) sont des structures copiées par valeur — pas de mutex nécessaire pour ces lectures.
 
 ---
 
-## 10. Différences T-Watch S3 vs S3 Plus
+## 11. Différences T-Watch S3 vs S3 Plus
 
 | Fonctionnalité | Standard | Plus |
 |---|---|---|
@@ -430,7 +572,7 @@ build_flags =
 
 ---
 
-## 11. Ressources & liens
+## 12. Ressources & liens
 
 ### Officiels LILYGO
 

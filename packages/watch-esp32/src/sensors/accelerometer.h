@@ -21,3 +21,7 @@ bool      accel_init();
 void      accel_update();           // Appelé périodiquement (tâche FreeRTOS)
 AccelData accel_get_data();
 void      accel_reset_steps();
+
+// Détection de chute : libre chute (<0.3g) suivie d'un impact (>2g)
+bool      accel_fall_detected();    // true pendant 5s après détection
+void      accel_clear_fall();       // acquitter manuellement
