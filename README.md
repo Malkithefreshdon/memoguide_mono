@@ -21,6 +21,7 @@ MemoGuide/
 ## Démarrage rapide
 
 ### Prérequis
+
 - [Task](https://taskfile.dev/) — `brew install go-task`
 - Node.js 22+, Python 3.12+, PlatformIO, West
 
@@ -61,3 +62,8 @@ Ouvrir le repo dans VS Code → **Reopen in Container** — tout l'outillage est
 ## Documentation
 
 Voir [`docs/protocol/`](docs/protocol/README.md) pour les protocoles BLE et API.
+
+python audio_relay.py \
+    --source dashboard \
+    --target 192.168.1.30 \
+    --dashboard ws://192.168.1.86/api/audio
